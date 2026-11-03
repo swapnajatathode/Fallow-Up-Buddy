@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#173b35">
+<meta name="description" content="A simple personal tracker for complaints, repairs and pending replies.">
+<link rel="manifest" href="manifest.webmanifest">
+<title>FollowUp Buddy</title>
+<style>
+:root{--green:#173b35;--pale:#e5f2eb;--line:#dce5e0;--ink:#17211d;--muted:#64736c;--white:#fff;--bg:#f4f7f5}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font:16px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink)}
+header{background:var(--green);color:#fff;padding:22px 18px 20px;border-radius:0 0 22px 22px}
+.wrap{max-width:720px;margin:auto}h1{font-size:25px;margin:0 0 4px}header p{margin:0;color:#d7e8e1;font-size:14px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}.stat{background:#285148;padding:13px;border-radius:12px}.stat small{display:block;color:#d7e8e1}.stat strong{font-size:26px}
+main{padding:16px;max-width:720px;margin:auto}.panel{background:white;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+h2{font-size:18px;margin:0 0 13px}label{display:block;font-size:13px;font-weight:650;margin:10px 0 5px}
+input,select,textarea{width:100%;font:inherit;padding:12px;border:1px solid #cbd7d0;border-radius:10px;background:#fff;color:var(--ink)}
+button{font:inherit;border:0;border-radius:10px;padding:11px 14px;background:var(--green);color:white;font-weight:650;cursor:pointer}
+button.secondary{background:#eef3f0;color:var(--green);border:1px solid var(--line)}button.danger{background:#fff0ee;color:#9d2d20;border:1px solid #f1c9c3}
+button:focus,input:focus,textarea:focus,select:focus{outline:2px solid #77a997;outline-offset:1px}.full{width:100%;margin-top:12px}
+.filters{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}.filters button{padding:8px 12px;font-size:14px}.filters .active{background:#dcefe4;color:var(--green)}
+.item{border:1px solid var(--line);border-radius:13px;padding:13px;margin:10px 0;background:white}.itemtop{display:flex;justify-content:space-between;gap:10px}.item h3{font-size:16px;margin:0 0 4px;overflow-wrap:anywhere}.muted{font-size:13px;color:var(--muted);overflow-wrap:anywhere}.pill{font-size:12px;padding:4px 8px;border-radius:20px;background:#fff0d8;color:#79520b;white-space:nowrap;height:max-content}.pill.done{background:#e0f4e6;color:#21653a}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.actions button{font-size:13px;padding:9px 10px}.message{margin-top:12px;background:#f4f7f5;border-radius:10px;padding:12px;font-size:14px;white-space:pre-wrap;line-height:1.5}.empty{text-align:center;color:var(--muted);padding:18px 5px}.privacy{font-size:12px;color:var(--muted);line-height:1.5}.topline{display:flex;justify-content:space-between;align-items:center;gap:10px}.smallbtn{font-size:12px;padding:7px 9px}
+@media(min-width:600px){main{padding:22px}.panel{padding:20px}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<h1>✓ FollowUp Buddy</h1><p>Every pending task, one place.</p>
+<div class="stats"><div class="stat"><small>Pending</small><strong id="pendingCount">0</strong></div><div class="stat"><small>Completed</small><strong id="completedCount">0</strong></div></div>
+</div></header>
+<main>
+<section class="panel">
+<h2>Add a follow-up</h2>
+<form id="addForm">
+<label for="task">What are you waiting for?</label><input id="task" maxlength="120" placeholder="e.g. Society water leakage complaint" required>
+<label for="person">Person or organisation (optional)</label><input id="person" maxlength="100" placeholder="e.g. Society office">
+<label for="ref">Reference number (optional)</label><input id="ref" maxlength="80" placeholder="Complaint or service ID">
+<label for="date">Next follow-up date</label><input id="date" type="date">
+<button class="full" type="submit">＋ Add follow-up</button>
+</form>
+</section>
+<section class="panel">
+<div class="topline"><h2>My follow-ups</h2><select id="language" aria-label="Message language" style="width:auto;max-width:145px;padding:8px"><option>English</option><option>Marathi</option></select></div>
+<div class="filters" id="filters"><button type="button" data-filter="All" class="active">All</button><button type="button" data-filter="Pending">Pending</button><button type="button" data-filter="Completed">Completed</button></div>
+<div id="items"></div>
+</section>
+<section class="panel"><h2>Privacy & backup</h2><p class="privacy">Your records are stored in this browser on this device. They are not sent to a FollowUp Buddy server. Clearing browser data or changing devices may erase them. Avoid entering sensitive personal details. Use Export backup periodically.</p><button id="export" class="secondary">Export backup</button> <button id="importBtn" class="secondary">Import backup</button><input id="importFile" type="file" accept="application/json" hidden></section>
+<p class="privacy">Prototype: reminders are not sent automatically. Check the app yourself for items due. FollowUp Buddy is not an official society helpdesk.</p>
+</main>
+<script>
+const KEY='followup-buddy-records-v1'; let currentFilter='All';
+const $=id=>document.getElementById(id);
+function read(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch{return []}}
+function save(items){localStorage.setItem(KEY,JSON.stringify(items))}
+function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function today(){let d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function render(){
+ let all=read();$('pendingCount').textContent=all.filter(x=>!x.done).length;$('completedCount').textContent=all.filter(x=>x.done).length;
+ document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===currentFilter));
+ let shown=all.filter(x=>currentFilter==='All'||(currentFilter==='Completed'?x.done:!x.done));
+ if(!shown.length){$('items').innerHTML='<div class="empty">No follow-ups here yet. Add one above.</div>';return}
+ $('items').innerHTML=shown.map(x=>{
+ let due=x.date?(x.date<today()&&!x.done?'Overdue':x.date===today()&&!x.done?'Due today':x.date):'No date set';
+ return `<article class="item"><div class="itemtop"><div><h3>${esc(x.task)}</h3><div class="muted">${esc(x.person||'Person not specified')}${x.ref?' · Ref: '+esc(x.ref):''}</div><div class="muted" style="margin-top:5px">${esc(due)}</div></div><span class="pill ${x.done?'done':''}">${x.done?'Completed':'Pending'}</span></div>
+ <label for="note-${x.id}">Latest update / notes</label><textarea id="note-${x.id}" rows="2" maxlength="600" placeholder="e.g. Called today; waiting for response">${esc(x.note||'')}</textarea>
+ <div class="actions"><button class="secondary" onclick="saveNote('${x.id}')">Save note</button><button class="secondary" onclick="makeMessage('${x.id}')">Draft follow-up</button><button onclick="toggleDone('${x.id}')">${x.done?'Reopen':'Mark completed'}</button><button class="danger" onclick="removeItem('${x.id}')">Delete</button></div>
+ <div id="msg-${x.id}"></div></article>`
+ }).join('')
+}
+window.saveNote=id=>{let a=read(),x=a.find(i=>i.id===id);if(x){x.note=$('note-'+id).value;save(a);render()}};
+window.toggleDone=id=>{let a=read(),x=a.find(i=>i.id===id);if(x){x.done=!x.done;save(a);render()}};
+window.removeItem=id=>{if(confirm('Delete this follow-up?')){save(read().filter(i=>i.id!==id));render()}};
+window.makeMessage=id=>{let x=read().find(i=>i.id===id);if(!x)return;let mar=$('language').value==='Marathi';let msg=mar?`नमस्कार, ${x.task} याबाबत पाठपुरावा करत आहे. कृपया सध्याची स्थिती आणि पुढील अपडेट कधी मिळेल ते कळवावे. धन्यवाद.`:`Hello, I'm following up on ${x.task}. Could you please share the current status and when I can expect an update? Thank you.`;let el=$('msg-'+id);el.innerHTML=`<div class="message">${esc(msg)}</div><button class="secondary smallbtn" style="margin-top:8px" onclick="copyMessage('${id}')">Copy message</button>`;el.dataset.message=msg};
+window.copyMessage=async id=>{let t=$('msg-'+id).dataset.message||'';try{await navigator.clipboard.writeText(t);alert('Message copied. Review it before sending.')}catch{prompt('Copy your message:',t)}};
+$('addForm').addEventListener('submit',e=>{e.preventDefault();let a=read();a.unshift({id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),task:$('task').value.trim(),person:$('person').value.trim(),ref:$('ref').value.trim(),date:$('date').value,note:'',done:false,created:new Date().toISOString()});save(a);e.target.reset();render()});
+$('filters').addEventListener('click',e=>{let b=e.target.closest('[data-filter]');if(b){currentFilter=b.dataset.filter;render()}});
+$('export').onclick=()=>{let blob=new Blob([JSON.stringify(read(),null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='followup-buddy-backup.json';a.click();URL.revokeObjectURL(url)};
+$('importBtn').onclick=()=>$('importFile').click();
+$('importFile').onchange=async e=>{let f=e.target.files[0];if(!f)return;try{let a=JSON.parse(await f.text());if(!Array.isArray(a))throw Error();save(a);render();alert('Backup imported.')}catch{alert('That file is not a valid backup.')}e.target.value=''};
+if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+render();
+</script>
+</body>
+</html>
